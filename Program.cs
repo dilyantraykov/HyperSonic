@@ -86,15 +86,16 @@ public class Program
         int width = int.Parse(inputs[0]);
         int height = int.Parse(inputs[1]);
         int myId = int.Parse(inputs[2]);
-        var players = new List<Player>();
-        var bombs = new List<Bomb>();
-        var boxes = new List<Entity>();
         var field = new CellType[Constants.FieldWidth, Constants.FieldHeight];
         var context = new GameContext() { MyId = myId, Turn = Constants.NumberOfRounds };
 
         // game loop
         while (true)
         {
+            var players = new List<Player>();
+            var bombs = new List<Bomb>();
+            var boxes = new List<Entity>();
+
             for (int i = 0; i < height; i++)
             {
                 string row = Console.ReadLine();
@@ -165,14 +166,16 @@ public class Program
     private static void ProcessTurn(GameContext context)
     {
         foreach (var box in context.Boxes)
+        {
             if (IsCloseEnoughToBomb(context.MyPlayer.Point, box.Point))
             {
                 Bomb(box.Point.X, box.Point.Y, string.Format($"BOMB {box.Point.X} {box.Point.Y}"));
                 return;
             }
+        }
 
-        Point closestBomb = GetClosestBox(context.MyPlayer, context.Boxes);
-        Bomb(closestBomb.X, closestBomb.Y, string.Format($"MOVE {closestBomb.X} {closestBomb.Y}"));
+        Point closestBox = GetClosestBox(context.MyPlayer, context.Boxes);
+        Move(closestBox.X, closestBox.Y, string.Format($"MOVE {closestBox.X} {closestBox.Y}"));
         return;
     }
 
