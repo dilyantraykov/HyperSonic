@@ -21,13 +21,25 @@ public class Constants
 
 public class GameContext
 {
+    public int MyId { get; set; }
+
     public int Turn { get; set; }
 
     public List<Player> Players { get; set; }
 
+    public Player MyPlayer
+    {
+        get
+        {
+            return this.Players.First(p => p.Id == this.MyId);
+        }
+    }
+
+    public List<Entity> Boxes { get; set; }
+
     public List<Bomb> Bombs { get; set; }
 
-    public char[,] Field { get; set; }
+    public CellType[,] Field { get; set; }
 }
 
 public class Entity
@@ -42,16 +54,6 @@ public class Player : Entity
     public int BombsLeft { get; set; }
 
     public int ExplosionRange { get; set; }
-
-    public void Bomb(int x, int y, params string[] messages)
-    {
-        Console.WriteLine($"BOMB {x} {y} {messages}");
-    }
-
-    public void Move(int x, int y, params string[] messages)
-    {
-        Console.WriteLine($"MOVE {x} {y} {messages}");
-    }
 }
 
 public class Bomb : Entity
@@ -69,6 +71,12 @@ public class Point
     public int Y { get; set; }
 }
 
+public enum CellType
+{
+    EmptyCell = 0,
+    Box = 1
+}
+
 public class Program
 {
     static void Main(string[] args)
@@ -78,9 +86,11 @@ public class Program
         int width = int.Parse(inputs[0]);
         int height = int.Parse(inputs[1]);
         int myId = int.Parse(inputs[2]);
-        List<Entity> entities = new List<Entity>();
-        var field = new char[Constants.FieldWidth, Constants.FieldHeight];
-        var context = new GameContext();
+        var players = new List<Player>();
+        var bombs = new List<Bomb>();
+        var boxes = new List<Entity>();
+        var field = new CellType[Constants.FieldWidth, Constants.FieldHeight];
+        var context = new GameContext() { MyId = myId, Turn = Constants.NumberOfRounds };
 
         // game loop
         while (true)
@@ -90,9 +100,24 @@ public class Program
                 string row = Console.ReadLine();
                 for (var j = 0; j < row.Length; j++)
                 {
-                    field[i, j] = row[j];
+                    switch (row[j])
+                    {
+                        case '.':
+                            field[i, j] = CellType.EmptyCell;
+                            break;
+                        case '0':
+                            field[i, j] = CellType.Box;
+                            boxes.Add(new Entity()
+                            {
+                                Point = new Point() { X = i, Y = j }
+                            });
+                            break;
+                        default:
+                            break;
+                    }
                 }
             }
+
             int entitiesCount = int.Parse(Console.ReadLine());
             for (int i = 0; i < entitiesCount; i++)
             {
@@ -104,44 +129,94 @@ public class Program
                 int param1 = int.Parse(inputs[4]);
                 int param2 = int.Parse(inputs[5]);
 
-                var entity = CreateEntity(entityType, owner, x, y, param1, param2);
-                entities.Add(entity);
+                if (entityType == 0)
+                {
+                    players.Add(new Player()
+                    {
+                        Id = owner,
+                        Point = new Point() { X = x, Y = y },
+                        BombsLeft = param1,
+                        ExplosionRange = param2
+                    });
+                }
+                else if (entityType == 1)
+                {
+                    bombs.Add(new Bomb()
+                    {
+                        OwnerId = owner,
+                        Point = new Point() { X = x, Y = y },
+                        RoundsUntilExplosion = param1,
+                        ExplosionRange = param2
+                    });
+                }
             }
 
+            context.Boxes = boxes;
+            context.Bombs = bombs;
+            context.Players = players;
+            context.Field = field;
+
             ProcessTurn(context);
+
+            context.Turn--;
         }
     }
 
-    private static void ProcessTurn(object context)
+    private static void ProcessTurn(GameContext context)
     {
-        throw new NotImplementedException();
+        foreach (var box in context.Boxes)
+            if (IsCloseEnoughToBomb(context.MyPlayer.Point, box.Point))
+            {
+                Bomb(box.Point.X, box.Point.Y, string.Format($"BOMB {box.Point.X} {box.Point.Y}"));
+                return;
+            }
+
+        Point closestBomb = GetClosestBox(context.MyPlayer, context.Boxes);
+        Bomb(closestBomb.X, closestBomb.Y, string.Format($"MOVE {closestBomb.X} {closestBomb.Y}"));
+        return;
     }
 
-    private static Entity CreateEntity(int entityType, int owner, int x, int y, int param1, int param2)
+    private static Point GetClosestBox(Player player, IEnumerable<Entity> boxes)
     {
-        if (entityType == 0)
+        var minDistance = int.MaxValue;
+        Point closestPoint = null;
+        foreach (var box in boxes)
         {
-            return new Player()
+            if (GetDistance(player.Point, box.Point) < minDistance)
             {
-                Id = owner,
-                Point = new Point() { X = x, Y = y },
-                BombsLeft = param1,
-                ExplosionRange = param2
-            };
+                closestPoint = box.Point;
+                minDistance = box.Point.X + box.Point.Y;
+            }
         }
-        else if (entityType == 1)
+
+        return closestPoint;
+    }
+
+    private static int GetDistance(Point p1, Point p2)
+    {
+        return Math.Abs(p1.X - p2.X) + Math.Abs(p1.Y - p2.Y);
+    }
+
+    private static bool IsCloseEnoughToBomb(Point playerPoint, Point boxPoint)
+    {
+        var distanceX = Math.Abs(playerPoint.X - boxPoint.X);
+        var distanceY = Math.Abs(playerPoint.Y - boxPoint.Y);
+        if ((distanceY == 0 && distanceX <= Constants.BombRange - 1) ||
+            (distanceX == 0 && distanceY <= Constants.BombRange - 1))
         {
-            return new Bomb()
-            {
-                OwnerId = owner,
-                Point = new Point() { X = x, Y = y },
-                RoundsUntilExplosion = param1,
-                ExplosionRange = param2
-            };
+            return true;
         }
-        else
-        {
-            return null;
-        }
+
+        return false;
+    }
+
+    public static void Bomb(int x, int y, params string[] messages)
+    {
+        Console.WriteLine($"BOMB {x} {y} {messages}");
+    }
+
+    public static void Move(int x, int y, params string[] messages)
+    {
+        Console.WriteLine($"MOVE {x} {y} {messages}");
     }
 }
